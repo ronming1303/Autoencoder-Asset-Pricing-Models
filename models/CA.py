@@ -28,13 +28,13 @@ class CA_base(nn.Module, modelBase):
         self.device = device
 
         self.datashare_chara = pd.read_pickle(
-            './data/datashare_re.pkl').astype(np.float64)
+            './data/datashare_re.pkl').astype(np.float64) # (N * T, 94)
         self.p_charas = pd.read_pickle(
-            './data/p_charas.pkl').astype(np.float64).reset_index()
+            './data/p_charas.pkl').astype(np.float64).reset_index() # (94 * T, 94)
         self.portfolio_ret = pd.read_pickle(
-            './data/portfolio_ret.pkl').astype(np.float64)
+            './data/portfolio_ret.pkl').astype(np.float64) # (T, 94)
         self.mon_ret = pd.read_pickle(
-            './data/month_ret.pkl').astype(np.float64)
+            './data/month_ret.pkl').astype(np.float64) # (N * T, [permno, date, month, ret-rf])
 
         self.train_dataloader = None
         self.valid_dataloader = None
@@ -54,11 +54,11 @@ class CA_base(nn.Module, modelBase):
 
         # (94, 94)
         beta_nn_input = self.p_charas.loc[self.p_charas['DATE']
-                                          == month][CHARAS_LIST]
+                                          == month][CHARAS_LIST] # (94, 94)
         labels = self.portfolio_ret.loc[self.portfolio_ret['DATE']
                                         == month][CHARAS_LIST].T.values  # (94, 1)
-        beta_nn_input['ret-rf'] = labels
-        align_df = beta_nn_input.copy(deep=False).dropna()
+        beta_nn_input['ret-rf'] = labels # => (94, 95)
+        align_df = beta_nn_input.copy(deep=False).dropna() # 
 
         factor_nn_input = self.portfolio_ret.loc[self.portfolio_ret['DATE']
                                                  == month][CHARAS_LIST]
@@ -66,7 +66,7 @@ class CA_base(nn.Module, modelBase):
         # exit(0) if there is any nan in align_df
         if align_df.isnull().values.any():
             assert False, f'There is nan in align_df of : {month}'
-        # return stock index (L), beta_nn_input (94*94=P*N), factor_nn_input (94*1=P*1), labels (94, = N,)
+        # return portfolio index (L=94), beta_nn_input (94*94=P*N), factor_nn_input (94*1=P*1), labels=portfolio return(94,1)
         return align_df.index, align_df.values[:, :-1].T, factor_nn_input.T.values, align_df.values[:, -1].T
 
     def dataloader(self, period):
@@ -83,20 +83,20 @@ class CA_base(nn.Module, modelBase):
             label_set.append(label)
 
         beta_nn_input_set = torch.tensor(
-            beta_nn_input_set, dtype=torch.float32).to(self.device)
+            beta_nn_input_set, dtype=torch.float32).to(self.device) # (len(mon_list), 94, 94)
         factor_nn_input_set = torch.tensor(
-            factor_nn_input_set, dtype=torch.float32).to(self.device)
+            factor_nn_input_set, dtype=torch.float32).to(self.device) # (len(mon_list), 94, 1)
         label_set = torch.tensor(
-            label_set, dtype=torch.float32).to(self.device)
+            label_set, dtype=torch.float32).to(self.device) # (len(mon_list), 94, 1)
 
         dataset = TensorDataset(
             beta_nn_input_set, factor_nn_input_set, label_set)
         return DataLoader(dataset, batch_size=1, shuffle=True)
 
     def forward(self, char, pfret):
-        processed_char = self.beta_nn(char)
-        processed_pfret = self.factor_nn(pfret)
-        return torch.sum(processed_char * processed_pfret, dim=1)
+        processed_char = self.beta_nn(char) # self.beta_nn 的结构会在instance中具体给出
+        processed_pfret = self.factor_nn(pfret) # self.factor_nn 的结构会在instance中具体给出
+        return torch.sum(processed_char * processed_pfret, dim=1) # （94，1）factor model计算的expected return
 
     # train_one_epoch
 
@@ -148,7 +148,7 @@ class CA_base(nn.Module, modelBase):
         self.test_dataloader = self.dataloader(self.test_period)
 
         min_error = np.Inf
-        no_update_steps = 0
+        no_update_steps = 0 
         valid_loss = []
         train_loss = []
         for i in range(MAX_EPOCH):
@@ -169,7 +169,7 @@ class CA_base(nn.Module, modelBase):
                 # save model
                 torch.save(self.state_dict(), f'./saved_models/{self.name}.pt')
             else:
-                no_update_steps += 1
+                no_update_steps += 1 # 如果validation loss没有下降，no_update_steps加1
 
             if no_update_steps > 2:  # early stop, if consecutive 3 epoches no improvement on validation set
                 print(f'Early stop at epoch {i}')
@@ -178,7 +178,7 @@ class CA_base(nn.Module, modelBase):
             self.load_state_dict(torch.load(f'./saved_models/{self.name}.pt'))
         return train_loss, valid_loss
 
-    def test_model(self):
+    def test_model(self): # 这个方法似乎没有用到过
         # beta, factor, label = self.test_dataset
         # i = np.random.randint(len(beta))
         # beta_nn_input = beta[i]
@@ -213,7 +213,7 @@ class CA_base(nn.Module, modelBase):
 
         beta_nn_input = torch.tensor(
             beta_nn_input, dtype=torch.float32).T.to(self.device)  # N*P
-        return self.beta_nn(beta_nn_input)  # N*K
+        return self.beta_nn(beta_nn_input)  # N*K，取决于beta_nn的具体结构和参数
 
     def calFactor(self, month, skip_char=[]):
         _, _, factor_nn_input, _ = self._get_item(month)  # factor input: P*1
@@ -227,7 +227,7 @@ class CA_base(nn.Module, modelBase):
 
         factor_nn_input = torch.tensor(
             factor_nn_input, dtype=torch.float32).T.to(self.device)  # 1*P
-        factor_pred = self.factor_nn(factor_nn_input).T  # K*1
+        factor_pred = self.factor_nn(factor_nn_input).T  # K*1，取决于factor_nn的具体结构和参数
 
         self.factor_nn_pred.append(factor_pred)
 
@@ -290,9 +290,9 @@ class CA_base(nn.Module, modelBase):
             del self.valid_dataloader
         if self.test_dataloader is not None:
             del self.test_dataloader
-        torch.cuda.empty_cache()
+        torch.mps.empty_cache()
 
-
+# hidden_size (K) means the number of factors
 class CA0(CA_base):
     def __init__(self, hidden_size, lr=0.001, omit_char=[], device='mps'):
         CA_base.__init__(
