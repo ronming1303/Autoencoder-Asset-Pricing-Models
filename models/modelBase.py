@@ -42,7 +42,7 @@ class modelBase:
         """
         pass
 
-    def inference(self, month):
+    def inference(self, month):  # inference是指 R_t,t+1 = Beta_t @ F_t,t+1
         assert month >= self.test_period[0], f"Month error, {month} is not in test period {self.test_period}"
 
         mon_factor, mon_beta = self.calFactor(month), self.calBeta(month)
@@ -53,7 +53,7 @@ class modelBase:
         # R_{N*1} = Beta_{N*K} @ F_{K*1}
         return mon_beta @ mon_factor
 
-    def predict(self, month):
+    def predict(self, month):  # predict是指 R_t,t+1 = Beta_t @ lag_F_avg
         assert month >= self.test_period[0] and month <= self.test_period[
             1], f"Month error, {month} is not in test period {self.test_period}"
 
